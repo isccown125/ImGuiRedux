@@ -74,7 +74,10 @@ LRESULT Hook::hkWndProc(const HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
     if (m_bInitialized) {
         ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam);
 
-        if (ImGui::GetIO().WantTextInput || (gGameVer > eGameVer::SA && mouseVisible)) {
+        // 64-bit games with the cursor shown: swallow only mouse input, so the keyboard still drives the game
+        // (swallowing every message made it impossible to walk/drive while the menu is open on SA DE)
+        bool mouseMsg = uMsg == WM_INPUT || (uMsg >= WM_MOUSEFIRST && uMsg <= WM_MOUSELAST);
+        if (ImGui::GetIO().WantTextInput || (gGameVer > eGameVer::SA && mouseVisible && mouseMsg)) {
     #ifndef _WIN64
             if (gGameVer == eGameVer::SA) {
                 reinterpret_cast<void(__cdecl*)()>(0x53F1E0)(); // CPad::ClearKeyboardHistory
