@@ -67,23 +67,22 @@ static RTN_TYPE RUNTIME_API ImGuiImageButton(RUNTIME_CONTEXT ctx) {
     ImVec2 size;
 
     wGetStringWithFrame(ctx, buf, RUNTIME_STR_LEN);
-    TextureInfo *pInfo = reinterpret_cast<TextureInfo*>(wGetIntParam(ctx));
+    int handle = wGetIntParam(ctx);
     size.x = wGetFloatParam(ctx);
     size.y = wGetFloatParam(ctx);
 
-    // FIX:
-    // Due to an issue textures aren't loaded in LoadImage but on ImageButton first call
-
-    if (!pInfo->pTexture && TextureMgr::Exists(pInfo)) {
-        TextureMgr::LoadTexture(*pInfo);
-    }
+    // resolved now (script thread), only the texture pointer goes into the render lambda
+    void *pTexture = TextureMgr::GetTexture(handle);
 
     ScriptExData* data = ScriptExData::Get();
     data->m_ImGuiData += [=]() {
         ImGui::PushID(buf);
         const ImGuiID id = ImGui::GetID(buf);
-        bool isPressed = ImGui::ImageButtonEx(id, pInfo->pTexture, size, {0.0f, 0.0f}, {1.0f, 1.0f}, 
-            data->m_ImGuiData.m_vecImgBgCol, data->m_ImGuiData.m_vecImgTint);
+        // missing image: plain button of the same size instead of handing ImGui a null texture
+        bool isPressed = pTexture
+            ? ImGui::ImageButtonEx(id, pTexture, size, {0.0f, 0.0f}, {1.0f, 1.0f},
+                data->m_ImGuiData.m_vecImgBgCol, data->m_ImGuiData.m_vecImgTint)
+            : ImGui::Button("?", size);
         ImGui::PopID();
         data->SetEvent(buf, 0, isPressed);
     };
@@ -121,13 +120,12 @@ static RTN_TYPE RUNTIME_API ImGuiLoadImage(RUNTIME_CONTEXT ctx) {
     char fullPath[RUNTIME_STR_LEN*2], path[RUNTIME_STR_LEN];
     wGetStringParam(ctx, path, RUNTIME_STR_LEN);
     wResolvePath(ctx, path, fullPath, sizeof(fullPath));
-    wSetIntParam(ctx, reinterpret_cast<int>(TextureMgr::LoadTextureFromPath(fullPath)));
+    wSetIntParam(ctx, TextureMgr::LoadTextureFromPath(fullPath));
     return RTN_CONTINUE;
 }
 
 static RTN_TYPE RUNTIME_API ImGuiFreeImage(RUNTIME_CONTEXT ctx) {
-    TextureInfo *pInfo = reinterpret_cast<TextureInfo*>(wGetIntParam(ctx));
-    TextureMgr::FreeTexture(pInfo);
+    TextureMgr::FreeTexture(wGetIntParam(ctx));
     return RTN_CONTINUE;
 }
 

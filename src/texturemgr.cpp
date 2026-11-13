@@ -54,7 +54,10 @@ static bool D3D11CreateTextureFromFile(ID3D11Device* pDevice, const char* filena
     subResource.SysMemPitch = desc.Width * 4;
     subResource.SysMemSlicePitch = 0;
 
-    pDevice->CreateTexture2D(&desc, &subResource, &pTexture);
+    if (FAILED(pDevice->CreateTexture2D(&desc, &subResource, &pTexture))) {
+        stbi_image_free(data);
+        return false;
+    }
 
     // Create texture view
     D3D11_SHADER_RESOURCE_VIEW_DESC srvDesc;
@@ -63,11 +66,11 @@ static bool D3D11CreateTextureFromFile(ID3D11Device* pDevice, const char* filena
     srvDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     srvDesc.Texture2D.MipLevels = desc.MipLevels;
     srvDesc.Texture2D.MostDetailedMip = 0;
-    pDevice->CreateShaderResourceView(pTexture, &srvDesc, outSrc);
-
+    HRESULT hr = pDevice->CreateShaderResourceView(pTexture, &srvDesc, outSrc);
+    pTexture->Release();
     stbi_image_free(data);
 
-    return true;
+    return SUCCEEDED(hr);
 }
 
 void TextureMgr::LoadTexture(TextureInfo &info) {
@@ -84,45 +87,44 @@ void TextureMgr::LoadTexture(TextureInfo &info) {
     }
 }
 
-TextureInfo* TextureMgr::LoadTextureFromPath(const char *path) {
+int TextureMgr::LoadTextureFromPath(const char *path) {
+    for (size_t i = 0; i < textureList.size(); i++) {
+        if (textureList[i].path == path) {
+            return static_cast<int>(i) + 1;
+        }
+    }
     TextureInfo info;
     info.path = std::string(path);
     info.pTexture = nullptr;
-    // FIX ME
-    // LoadTexture(info);
     textureList.push_back(std::move(info));
-    return &textureList.back();
+    return static_cast<int>(textureList.size());
 }
 
-void TextureMgr::FreeTexture(TextureInfo *pInfo) {
-    if (!pInfo) {
+void* TextureMgr::GetTexture(int handle) {
+    if (handle < 1 || handle > static_cast<int>(textureList.size())) {
+        return nullptr;
+    }
+    TextureInfo &info = textureList[handle - 1];
+    // loaded on first use: LoadImage can run before the device exists
+    if (!info.pTexture) {
+        LoadTexture(info);
+    }
+    return info.pTexture;
+}
+
+void TextureMgr::FreeTexture(int handle) {
+    if (handle < 1 || handle > static_cast<int>(textureList.size())) {
+        return;
+    }
+    TextureInfo &info = textureList[handle - 1];
+    if (!info.pTexture) {
         return;
     }
 
     if (gRenderer == eRenderer::Dx9) {
-        reinterpret_cast<IDirect3DTexture9*>(pInfo->pTexture)->Release();
+        reinterpret_cast<IDirect3DTexture9*>(info.pTexture)->Release();
     } else if (gRenderer == eRenderer::Dx11) {
-        reinterpret_cast<ID3D11ShaderResourceView*>(pInfo->pTexture)->Release();
+        reinterpret_cast<ID3D11ShaderResourceView*>(info.pTexture)->Release();
     }
-
-    std::remove(textureList.begin(), textureList.end(), *pInfo);
-}
-
-TextureInfo* TextureMgr::FindInfo(std::string &&path) {
-    for (auto &item : textureList) {
-        if (item.path == path) {
-            return &item;
-        }
-    }
-
-    return nullptr;
-}
-
-bool TextureMgr::Exists(TextureInfo *pInfo) {
-    for (TextureInfo item : textureList) {
-        if (item.path == pInfo->path) {
-            return true;
-        }
-    }
-    return false;
+    info.pTexture = nullptr;
 }

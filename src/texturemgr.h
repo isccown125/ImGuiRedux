@@ -8,38 +8,31 @@ struct TextureInfo {
     unsigned int lastAccessed; // last time when the texture was accessed (seconds)
 
     TextureInfo() {};
-    bool operator==(const TextureInfo &pInfo) {
-        return (path == pInfo.path && pInfo.pTexture && pTexture == pInfo.pTexture);
-    }
 };
 
 /*
-    Handles loading, unloading images
+    Handles loading, unloading images.
+    Scripts get a handle (1-based index into textureList), never a pointer: script ints are 32-bit (a 64-bit
+    pointer got truncated) and vector elements move when the list grows (old pointers dangled).
+    Slots are never erased, so a handle stays valid for the whole session.
 */
 class TextureMgr {
   private:
-    // static inline constexpr unsigned int TIMEOUT = 30; // Unload unused textures
     static inline std::vector<TextureInfo> textureList;
 
   public:
     TextureMgr() = delete;
     TextureMgr(TextureMgr&) = delete;
 
-    // Returns true if texture exsits in list
-    static bool Exists(TextureInfo *pInfo);
+    // Returns the texture of a handle, loading it on first use; nullptr for a bad handle or a failed load
+    static void* GetTexture(int handle);
 
-    // Unloads a texture from memory, handles different backends
-    static void FreeTexture(TextureInfo *pInfo);
+    // Releases the texture; the handle stays valid and reloads on next use
+    static void FreeTexture(int handle);
 
-    // Returns TextureInfo from file path
-    static TextureInfo* FindInfo(std::string&& path);
-
-    // Loads texture, returns nullptr on failure
+    // Loads texture, handles different backends
     static void LoadTexture(TextureInfo &info);
 
-    // Loads texture from given path, returns nullptr on failure
-    static TextureInfo* LoadTextureFromPath(const char *path);
-
-    // Frees memory by clearing up unused textures
-    // static void RunCleanup();
+    // Registers an image path (same path = same handle), returns its handle
+    static int LoadTextureFromPath(const char *path);
 };
