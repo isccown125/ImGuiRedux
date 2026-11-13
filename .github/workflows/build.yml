@@ -1,5 +1,7 @@
 name: Build ImGuiRedux
 on: push
+permissions:
+  contents: write
 jobs:
   ImGuiRedux:
     runs-on: windows-latest
